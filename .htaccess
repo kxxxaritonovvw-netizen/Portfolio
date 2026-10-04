@@ -1,0 +1,10 @@
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript image/svg+xml
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Revalidate assets so every deployment is visible without a hard refresh.
+  <FilesMatch "\.(html|css|js|svg|png)$">
+    Header set Cache-Control "public, max-age=0, must-revalidate"
+  </FilesMatch>
+</IfModule>

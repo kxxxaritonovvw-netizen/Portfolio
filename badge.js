@@ -32,10 +32,10 @@ async function initBadge() {
   let qualityScale = 1;
   function setResolution(still = false) {
     // Retina detail while settled; cap moving pixels and adapt only when needed.
-    const budget = leanDevice ? 1800000 : still ? 8500000 : 5000000;
-    const ratio = Math.min(devicePixelRatio, leanDevice ? 1.25 : still ? 3 : 2,
+    const budget = leanDevice ? 1000000 : still ? 4000000 : 2400000;
+    const ratio = Math.min(devicePixelRatio, leanDevice ? 1 : still ? 2 : 1.5,
       Math.sqrt(budget / (innerWidth * innerHeight))) * (still ? 1 : qualityScale);
-    renderer.setPixelRatio(ratio);
+    if (Math.abs(renderer.getPixelRatio() - ratio) > .01) renderer.setPixelRatio(ratio);
     host.dataset.pixelRatio = ratio.toFixed(2);
   }
   setResolution();
@@ -191,6 +191,8 @@ async function initBadge() {
 
   const segments = leanDevice ? 24 : 40;
   const ribbonGeometry = new THREE.PlaneGeometry(.36, 1, 1, segments);
+  ribbonGeometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
+  ribbonGeometry.attributes.normal.setUsage(THREE.DynamicDrawUsage);
   const ribbon = new THREE.Mesh(ribbonGeometry, fabric);
   ribbon.frustumCulled = false;
   scene.add(ribbon);
@@ -215,6 +217,7 @@ async function initBadge() {
   const previous = new THREE.Vector3(), delta = new THREE.Vector3();
   const point = new THREE.Vector3(), tangent = new THREE.Vector3(), side = new THREE.Vector3();
   const projected = new THREE.Vector3();
+  const rotationBefore = new THREE.Vector3();
   const corners = [[-1.3, -.5], [1.3, -.5], [-1.3, -4.4], [1.3, -4.4]];
   let frameId = null, last = 0, accumulator = 0, settledFor = 0;
   let samples = 0, sampleTime = 0, warmFrames = 0, frames = 0;
@@ -352,6 +355,7 @@ async function initBadge() {
     accumulator += dt;
     while (accumulator >= 1 / 120) { physics(1 / 120); accumulator -= 1 / 120; }
     {
+      rotationBefore.set(badge.rotation.x, badge.rotation.y, badge.rotation.z);
       badge.position.copy(end);
       const angle = THREE.MathUtils.clamp((end.x - anchor.x) * .15 + velocity.x * .045, -.42, .42);
       const follow = 1 - Math.exp(-7 * dt);
@@ -380,10 +384,13 @@ async function initBadge() {
         minX = Math.min(minX, px); maxX = Math.max(maxX, px);
         minY = Math.min(minY, py); maxY = Math.max(maxY, py);
       }
-      handle.style.transform = `translate3d(${minX}px, ${minY}px, 0)`;
-      handle.style.width = `${maxX - minX}px`; handle.style.height = `${maxY - minY}px`;
+      const transform = `translate3d(${minX.toFixed(1)}px, ${minY.toFixed(1)}px, 0)`;
+      const width = `${(maxX - minX).toFixed(1)}px`, height = `${(maxY - minY).toFixed(1)}px`;
+      if (handle.style.transform !== transform) handle.style.transform = transform;
+      if (handle.style.width !== width) handle.style.width = width;
+      if (handle.style.height !== height) handle.style.height = height;
       renderer.render(scene, camera);
-      host.dataset.frames = String(++frames);
+      frames++;
     }
     if (exiting && end.y - 4.6 * scale > worldHeight / 2 + .8) { finishExit(); return; }
     if (returning && exitTime > .85 && Math.abs(end.y - 2.42 * scale) < .2 && velocity.lengthSq() < 1) {
@@ -402,7 +409,9 @@ async function initBadge() {
       }
     }
     const ropeStill = particles.every((p, i) => i === 0 || i === 14 || p.p.distanceToSquared(p.old) < .000002);
-    const rotationStill = Math.abs(badge.rotation.z) < .008 && Math.abs(badge.rotation.y - restingYaw()) < .003;
+    const rotationStill = Math.abs(badge.rotation.x - rotationBefore.x) < .0001 &&
+      Math.abs(badge.rotation.y - rotationBefore.y) < .0001 &&
+      Math.abs(badge.rotation.z - rotationBefore.z) < .0001;
     if (!exiting && !returning && !active && velocity.lengthSq() < .0004 && ropeStill && rotationStill) settledFor += dt;
     else settledFor = 0;
     if (settledFor > .6) {
